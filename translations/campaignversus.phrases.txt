@@ -1,0 +1,8 @@
+"Phrases"
+{
+	"Respawn Text"
+	{
+		"#format"	"{1:.1f}"
+		"en"		"You will respawn in {1} second(s).\nIf you are not respawning, Please type !infected in the chat."
+	}
+}
