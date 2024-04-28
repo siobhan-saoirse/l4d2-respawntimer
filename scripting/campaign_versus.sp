@@ -48,12 +48,14 @@ public void OnPluginStart()
 		g_cvConVars[i].AddChangeHook(ConVar_Update); // Hook ConVar changes.
 	}
 
-	RegAdminCmd("sm_infected", sm_infected, ADMFLAG_ROOT);
-	RegAdminCmd("sm_survivor", sm_survivor, ADMFLAG_ROOT);
+	RegAdminCmd("sm_infected", Menu_Test1, ADMFLAG_ROOT);
+	RegAdminCmd("sm_survivor", Menu_Test1, ADMFLAG_ROOT);
+	RegAdminCmd("sm_survivors", Menu_Test1, ADMFLAG_ROOT);
 	
 	AutoExecConfig(true, "campaignversus");
 
 	HookEvent("player_spawn", Event_PlayerSpawn); // Hook the player death event.
+	HookEvent("player_first_spawn", Event_PlayerFirstSpawn); // Hook the player death event.
 	HookEvent("player_team", Event_PlayerTeam); // Hook the player death event.
 	HookEvent("player_death", Event_PlayerDeath); // Hook the player death eve3
 	HookEvent("mission_lost", Event_RoundWin); // Hook the round end event.
@@ -103,6 +105,7 @@ void L4D_OnSpawnTank_Post(int client, const float vecPos[3], const float vecAng[
 		char name[256];
 		GetClientName(inf,name,sizeof(name));
 		PrintHintTextToAll("A tank is approaching\n%s is becoming the tank",name);
+		L4D_ReplaceWithBot(inf);
 		L4D_TakeOverZombieBot(inf, client);
 		g_hTimer[client] = null;
 	
@@ -206,14 +209,9 @@ public void OnClientDisconnect(int client)
 
 public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
-	if (!g_cvEnabled || (!g_cvEndRound && !g_bRoundActive))
-	{
-		return;
-	}
-
 	int client = GetClientOfUserId(event.GetInt("userid"));
 
-	if (IsValidClient(client, false) && GetClientTeam(client) == 3) // Make sure the client is valid, they didn't fake their death with a dead ringer, etc.
+	if (client != 0 && !IsFakeClient(client) && GetClientTeam(client) == 3) // Make sure the client is valid, they didn't fake their death with a dead ringer, etc.
 	{	
 		if (g_hTimer[client] != INVALID_HANDLE) {
 			delete g_hTimer[client];
@@ -231,6 +229,27 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 
 	int client = GetClientOfUserId(event.GetInt("userid"));
 
+	if (GetClientTeam(client) == 3 && IsFakeClient(client)) {
+	/*
+		int inf = GetRandomPlayer(3);
+		if (!IsPlayerAlive(inf)) {
+			if (L4D2_GetPlayerZombieClass(client) == 7) 
+				L4D_TakeOverZombieBot(inf, client);
+		}
+	*/
+	}
+}
+
+
+public void Event_PlayerFirstSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	if (!g_cvEnabled || (!g_cvEndRound && !g_bRoundActive))
+	{
+		return;
+	}
+
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	
 	if (GetClientTeam(client) == 3 && IsFakeClient(client)) {
 	/*
 		int inf = GetRandomPlayer(3);
@@ -336,6 +355,19 @@ stock int GetRandomPlayer(int team)
     } 
     return (clientCount == 0) ? -1 : clients[GetRandomInt(0, clientCount - 1)]; 
 }
+stock int GetRandomTeamClient(int team) 
+{ 
+    int[] clients = new int[MaxClients]; 
+    int clientCount; 
+    for (int i = 1; i <= MaxClients; i++) 
+    { 
+        if (team == 3 && IsClientInGame(i) && GetClientTeam(i) == team || team == 2 && IsClientInGame(i) && GetClientTeam(i) == team)
+        { 
+            clients[clientCount++] = i; 
+        } 
+    } 
+    return (clientCount == 0) ? -1 : clients[GetRandomInt(0, clientCount - 1)]; 
+}
 
 stock int GetRandomBot(int team) 
 { 
@@ -374,26 +406,174 @@ stock int GetAliveTeamCount(int team)
     }
     return number;
 } 
+
+public int MenuHandler1(Menu menu, MenuAction action, int param1, int param2)
+{
+  switch(action)
+  {
+    case MenuAction_Start:
+    {
+      PrintToServer("Displaying menu");
+    }
+ 
+    case MenuAction_Display:
+    {
+      char buffer[255];
+      Format(buffer, sizeof(buffer), "Pick a Team");
+ 
+      Panel panel = view_as<Panel>(param2);
+      panel.SetTitle(buffer);
+      PrintToServer("Client %d was sent menu with panel %x", param1, param2);
+    }
+ 
+    case MenuAction_Select:
+    {
+		  char info[32];
+		  menu.GetItem(param2, info, sizeof(info));
+		  if (StrEqual(info, "tip1") || StrEqual(info, "tip2") || StrEqual(info, "tip3"))
+		  {
+			PrintToServer("Client %d somehow selected %s despite it being disabled", param1, info);
+		  }
+		  else
+		  {
+			if (StrEqual(info, "Survivors") && GetClientTeam(param1) != 2) {					
+				if (GetRandomBot(2) != -1) {
+					ChangeClientTeam(param1, 0);
+					L4D_SetHumanSpec(GetRandomBot(2),param1);
+					L4D_TakeOverBot(param1);
+				} else {
+					new surv = GetRandomTeamClient(2);
+					if (surv > 1) {
+						
+						int client = param1;
+						float pos[3];
+						float ang[3];	
+						GetClientAbsOrigin(surv,pos);
+						GetClientAbsAngles(surv,ang);
+						ChangeClientTeam(param1, 2);
+						L4D_RespawnPlayer(param1);
+						TeleportEntity(param1,pos,NULL_VECTOR,NULL_VECTOR);
+						int flags = GetCommandFlags("give");
+						SetCommandFlags("give", flags & ~FCVAR_CHEAT);
+						FakeClientCommand( client, "give smg" );
+						FakeClientCommand( client, "give pistol" );
+						FakeClientCommand( client, "give pistol" );
+						SetCommandFlags( "give", flags|FCVAR_CHEAT );
+						CreateTimer(8.0, PickATeam, client, TIMER_FLAG_NO_MAPCHANGE);
+					} else {
+						
+						ChangeClientTeam(param1, 2);
+						L4D_RespawnPlayer(param1);
+						int client = param1;
+						int flags = GetCommandFlags("give");
+						SetCommandFlags("give", flags & ~FCVAR_CHEAT);
+						FakeClientCommand( client, "give smg" );
+						FakeClientCommand( client, "give pistol" );
+						FakeClientCommand( client, "give pistol" );
+						SetCommandFlags( "give", flags|FCVAR_CHEAT );
+						CreateTimer(8.0, PickATeam, client, TIMER_FLAG_NO_MAPCHANGE);
+					}
+					float pos[3];
+					float ang[3];	
+					GetClientAbsOrigin(surv,pos);
+					GetClientAbsAngles(surv,ang);
+				}
+			} else if (StrEqual(info, "Infected")) {					
+				L4D_ReplaceWithBot(param1);	
+				ChangeClientTeam(param1, 3);
+				g_hTimer[param1] = CreateTimer(g_cvRespawnTime, Timer_Respawn, param1, TIMER_FLAG_NO_MAPCHANGE);
+				CreateTimer(0.0, Timer_RespawnHint, param1, TIMER_FLAG_NO_MAPCHANGE);
+				char name[256];
+				GetClientName(param1,name,sizeof(name));
+			} else if (StrEqual(info, "Random")) {					
+				L4D_ReplaceWithBot(param1);		
+					if (GetRandomInt(1,3) != 1 && GetClientTeam(param1) != 2) {
+						if (GetRandomBot(2) > 1) {
+							ChangeClientTeam(param1, 0);
+							L4D_SetHumanSpec(GetRandomBot(2),param1);
+							L4D_TakeOverBot(param1);
+						} else {
+							new surv = GetRandomSurvivor();
+							float pos[3];
+							float ang[3];	
+							GetClientAbsOrigin(surv,pos);
+							GetClientAbsAngles(surv,ang);
+							ChangeClientTeam(param1, 2);
+							L4D_RespawnPlayer(param1);
+							if (L4D_GetRandomPZSpawnPosition(surv,1,100,pos) == true) {	
+								TeleportEntity(param1,pos,NULL_VECTOR,NULL_VECTOR);
+							}
+						}
+					} else {
+						ChangeClientTeam(param1, 3);
+						CreateTimer(16.0, Timer_Respawn, param1, TIMER_FLAG_NO_MAPCHANGE);
+						CreateTimer(0.0, Timer_RespawnHint, param1, TIMER_FLAG_NO_MAPCHANGE);
+						char name[256];
+						GetClientName(param1,name,sizeof(name));
+					}
+			}
+		}
+    }
+ 
+    case MenuAction_Cancel:
+    {
+      PrintToServer("Client %d's menu was cancelled for reason %d", param1, param2);
+    }
+ 
+    case MenuAction_End:
+    {
+      delete menu;
+    }
+ 
+    case MenuAction_DrawItem:
+    {
+      int style;
+      char info[32];
+      menu.GetItem(param2, info, sizeof(info), style);
+ 
+      if (StrEqual(info, "tip1") || StrEqual(info, "tip2") || StrEqual(info, "tip3"))
+      {
+        return ITEMDRAW_DISABLED;
+      }
+      else
+      {
+        return style;
+      }
+    }
+  }
+ 
+  return 0;
+}
+ 
+public Action Menu_Test1(int client, int args)
+{
+  Menu menu = new Menu(MenuHandler1, MENU_ACTIONS_ALL);
+  menu.SetTitle("Pick a Team");
+  menu.AddItem("Survivors", "Survivors");
+  menu.AddItem("Infected", "Infected");
+  menu.AddItem("Random", "Random");
+  menu.AddItem("tip1","Press 1, or 2 on your keyboard to pick a team.");
+  menu.AddItem("tip2","Press 3 on your keyboard to pick a random team")
+  menu.AddItem("tip3","Say !infected or !survivor to open this menu again")
+  menu.ExitButton = false;
+  menu.Display(client, 20);
+ 
+  return Plugin_Handled;
+}
 public OnClientPutInServer(client)  
-{  
-	if (GetAliveTeamCount(2) == 4 && !IsFakeClient(client)) {
-		ChangeClientTeam(client, 3);
-		CreateRespawnTimer(client);
-		char name[256];
-		GetClientName(client,name,sizeof(name));
-		PrintToChatAll("%s is joining the Infected",name);
+{ 	
+	if (!IsFakeClient(client)) {
+	
+		CreateTimer(8.0, PickATeam, client, TIMER_FLAG_NO_MAPCHANGE);
+		
 	}
-	
-	char name[256];
-	GetClientName(client,name,sizeof(name));
-	PrintToChat(client, "Hey %s, I just want to let you know that this server is modded, and you can become an special infected.\nThis server also has better Nextbot AI.",name);
-	PrintToChat(client, "Commands: !infected, !survivor, !csm");
-	PrintToChat(client, "Being an special infected can be buggy. Multiple tanks may spawn if theres a human in the infected team. Report any other bugs you've see to Techy");
-	PrintToChat(client, "Cheating is punishable. Play fairly.");
-	
 }
 /* Timers ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
+public Action PickATeam(Handle timer, any client)
+{
+	Menu_Test1(client,0)
+}
 public Action Timer_Respawn(Handle timer, any client)
 {
 	if (!IsPlayerAlive(client) && GetClientTeam(client) == 3)
@@ -513,7 +693,7 @@ bool DoesClientHaveRequiredFlag(int client)
 // Create the respawn timer.
 void CreateRespawnTimer(int client)
 {	
-	g_hTimer[client] = CreateTimer(g_cvRespawnTime, Timer_Respawn, client, TIMER_FLAG_NO_MAPCHANGE);
+	g_hTimer[client] = CreateTimer(g_cvRespawnTime + 6.0, Timer_Respawn, client, TIMER_FLAG_NO_MAPCHANGE);
 	CreateTimer(6.0, Timer_RespawnHint, client, TIMER_FLAG_NO_MAPCHANGE);
 
 }
