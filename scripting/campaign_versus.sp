@@ -104,7 +104,6 @@ void L4D_OnSpawnTank_Post(int client, const float vecPos[3], const float vecAng[
 	
 		char name[256];
 		GetClientName(inf,name,sizeof(name));
-		PrintHintTextToAll("A tank is approaching\n%s is becoming the tank",name);
 		L4D_ReplaceWithBot(inf);
 		L4D_TakeOverZombieBot(inf, client);
 		g_hTimer[client] = null;
@@ -275,9 +274,9 @@ public void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
 	GetClientName(client,name,sizeof(name));
 	if (!IsFakeClient(client)) {
 		if (team == 3){ 
-			PrintToChatAll("%s is joining the Infected",name);
+			PrintToServer("%s is joining the Infected",name);
 		} else if (team == 2) {
-			PrintToChatAll("%s is joining the Survivors",name);
+			PrintToServer("%s is joining the Survivors",name);
 		}
 	}
 }
@@ -321,7 +320,6 @@ public void Event_TankSpawned(Event event, const char[] name, bool dontBroadcast
 	float ang[3];	
 	GetClientAbsOrigin(surv,pos);
 	GetClientAbsAngles(surv,ang);
-	PrintHintTextToAll("A tank is approaching");
 	int special = GetRandomInt(0,6); 
 	if (L4D_GetRandomPZSpawnPosition(client,special,7,pos) == true && !IsHumanTankAlive()) {		
 		int bot = L4D2_SpawnTank(pos,ang);
@@ -560,14 +558,7 @@ public Action Menu_Test1(int client, int args)
  
   return Plugin_Handled;
 }
-public OnClientPutInServer(client)  
-{ 	
-	if (!IsFakeClient(client)) {
-	
-		CreateTimer(8.0, PickATeam, client, TIMER_FLAG_NO_MAPCHANGE);
-		
-	}
-}
+
 /* Timers ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
 public Action PickATeam(Handle timer, any client)
